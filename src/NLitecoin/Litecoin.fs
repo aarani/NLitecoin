@@ -173,40 +173,6 @@ and LitecoinMainnetAddressStringParser() =
                 true
             else
                 base.TryParse(str, network, targetType, &result)
-and LitecoinTestnetAddressStringParser () =
-    inherit NetworkStringParser()
-
-    override self.TryParse(str: string, network: Network, targetType: Type, result: byref<IBitcoinString>) =
-        let mutable success = false
-        if str.StartsWith("ttpv", StringComparison.OrdinalIgnoreCase) && targetType.GetTypeInfo().IsAssignableFrom(typeof<BitcoinExtKey>.GetTypeInfo()) then
-            try
-                let decoded = Encoders.Base58Check.DecodeData str
-                decoded.[0] <- 0x04uy
-                decoded.[1] <- 0x35uy
-                decoded.[2] <- 0x83uy
-                decoded.[3] <- 0x94uy
-                result <- BitcoinExtKey(Encoders.Base58Check.EncodeData decoded, network)
-                success <- true
-            with
-            | _ -> ()
-        if success then
-            true
-        else
-            if  str.StartsWith("ttub", StringComparison.OrdinalIgnoreCase) && targetType.GetTypeInfo().IsAssignableFrom(typeof<BitcoinExtPubKey>.GetTypeInfo()) then
-                try
-                    let decoded = Encoders.Base58Check.DecodeData str
-                    decoded.[0] <- 0x04uy
-                    decoded.[1] <- 0x35uy
-                    decoded.[2] <- 0x87uy
-                    decoded.[3] <- 0xCFuy
-                    result <- BitcoinExtPubKey(Encoders.Base58Check.EncodeData decoded, network)
-                    success <- true
-                with
-                | _ -> ()
-            if success then
-                true
-            else
-                base.TryParse(str, network, targetType, &result)
 
 and LitecoinConsensusFactory private() =
     inherit ConsensusFactory()
@@ -298,19 +264,9 @@ type Litecoin private() =
             [| 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0xffuy; 0xffuy; 0xd5uy; 0x7euy; 0x8duy; 0x3cuy |], 9333
         |]
     
-    static let pnSeed6_test : array<array<byte> * int> =
-        [|
-            [| 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0xffuy; 0xffuy; 0x68uy; 0xecuy; 0xd3uy; 0xceuy |], 19335
-            [| 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0x00uy; 0xffuy; 0xffuy; 0x42uy; 0xb2uy; 0xb6uy; 0x23uy |], 19335
-        |]
-
-    
     static member val Instance = Litecoin()
 
     override self.CryptoCode = "LTC"
-
-    override self.PostInit() =
-        self.RegisterDefaultCookiePath("Litecoin", NetworkSetBase.FolderName(TestnetFolder = "testnet4"))
 
     override self.CreateMainnet() : NetworkBuilder =
         let bech32 = Encoders.Bech32 "ltc"
@@ -364,97 +320,11 @@ type Litecoin private() =
                 |])
             .AddSeeds(NetworkSetBase.ToSeed pnSeed6_main)
             .SetGenesis("010000000000000000000000000000000000000000000000000000000000000000000000d9ced4ed1130f7b7faad9be25323ffafa33232a17c3edf6cfd97bee6bafbdd97b9aa8e4ef0ff0f1ecd513f7c0101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4804ffff001d0104404e592054696d65732030352f4f63742f32303131205374657665204a6f62732c204170706c65e280997320566973696f6e6172792c2044696573206174203536ffffffff0100f2052a010000004341040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9ac00000000")
+    
+    /// not used in GWallet
+    override self.CreateTestnet() =
+        null
 
-    override self.CreateTestnet() : NetworkBuilder =
-        let bech32 = Encoders.Bech32 "tltc"
-        let builder = NetworkBuilder()
-        builder
-            .SetConsensus(
-                Consensus(
-                    SubsidyHalvingInterval = 840000,
-                    MajorityEnforceBlockUpgrade = 51,
-                    MajorityRejectBlockOutdated = 75,
-                    MajorityWindow = 1000,
-                    PowLimit = new Target(new uint256("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")),
-                    PowTargetTimespan = TimeSpan.FromSeconds(3.5 * 24.0 * 60.0 * 60.0),
-                    PowTargetSpacing = TimeSpan.FromSeconds(2.5 * 60.0),
-                    PowAllowMinDifficultyBlocks = true,
-                    PowNoRetargeting = false,
-                    RuleChangeActivationThreshold = 1512,
-                    MinerConfirmationWindow = 2016,
-                    CoinbaseMaturity = 100,
-                    LitecoinWorkCalculation = true,
-                    ConsensusFactory = LitecoinConsensusFactory.Instance,
-                    SupportSegwit = true,
-                    SupportTaproot = true
-                )
-            )
-            .SetBase58Bytes(Base58Type.PUBKEY_ADDRESS, [| 111uy |])
-            .SetBase58Bytes(Base58Type.SCRIPT_ADDRESS, [| 58uy |])
-            .SetBase58Bytes(Base58Type.SECRET_KEY, [| 239uy |])
-            .SetBase58Bytes(Base58Type.EXT_PUBLIC_KEY, [| 0x04uy; 0x35uy; 0x87uy; 0xCFuy |])
-            .SetBase58Bytes(Base58Type.EXT_SECRET_KEY, [| 0x04uy; 0x35uy; 0x83uy; 0x94uy |])
-            .SetNetworkStringParser(new LitecoinTestnetAddressStringParser())
-            .SetBech32(Bech32Type.WITNESS_PUBKEY_ADDRESS, bech32)
-            .SetBech32(Bech32Type.WITNESS_SCRIPT_ADDRESS, bech32)
-            .SetBech32(Bech32Type.TAPROOT_ADDRESS, bech32)
-            .SetMagic(0xf1c8d2fdu)
-            .SetPort(19335)
-            .SetRPCPort(19332)
-            .SetName("ltc-test")
-            .AddAlias("ltc-testnet")
-            .AddAlias("litecoin-test")
-            .AddAlias("litecoin-testnet")
-            .SetUriScheme("litecoin")
-            .AddDNSSeeds(
-                [|
-                    DNSSeedData("litecointools.com", "testnet-seed.litecointools.com")
-                    DNSSeedData("loshan.co.uk", "seed-b.litecoin.loshan.co.uk")
-                    DNSSeedData("thrasher.io", "dnsseed-testnet.thrasher.io")
-                |]
-            )
-            .AddSeeds(NetworkSetBase.ToSeed pnSeed6_test)
-            .SetGenesis("010000000000000000000000000000000000000000000000000000000000000000000000d9ced4ed1130f7b7faad9be25323ffafa33232a17c3edf6cfd97bee6bafbdd97f60ba158f0ff0f1ee17904000101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4804ffff001d0104404e592054696d65732030352f4f63742f32303131205374657665204a6f62732c204170706c65e280997320566973696f6e6172792c2044696573206174203536ffffffff0100f2052a010000004341040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9ac00000000")
-        
-    override self.CreateRegtest() : NetworkBuilder =
-        let bech32 = Encoders.Bech32 "rltc"
-        let builder = NetworkBuilder()
-        builder
-            .SetConsensus(
-                Consensus(
-                    SubsidyHalvingInterval = 150,
-                    MajorityEnforceBlockUpgrade = 51,
-                    MajorityRejectBlockOutdated = 75,
-                    MajorityWindow = 144,
-                    PowLimit = new Target(new uint256("7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")),
-                    PowTargetTimespan = TimeSpan.FromSeconds(3.5 * 24.0 * 60.0 * 60.0),
-                    PowTargetSpacing = TimeSpan.FromSeconds(2.5 * 60.0),
-                    PowAllowMinDifficultyBlocks = true,
-                    MinimumChainWork = uint256.Zero,
-                    PowNoRetargeting = true,
-                    RuleChangeActivationThreshold = 108,
-                    MinerConfirmationWindow = 2016,
-                    CoinbaseMaturity = 100,
-                    LitecoinWorkCalculation = true,
-                    ConsensusFactory = LitecoinConsensusFactory.Instance,
-                    SupportSegwit = true,
-                    SupportTaproot = true
-                )
-            )
-            .SetBase58Bytes(Base58Type.PUBKEY_ADDRESS, [| 111uy |])
-            .SetBase58Bytes(Base58Type.SCRIPT_ADDRESS, [| 58uy |])
-            .SetBase58Bytes(Base58Type.SECRET_KEY, [| 239uy |])
-            .SetBase58Bytes(Base58Type.EXT_PUBLIC_KEY, [| 0x04uy; 0x35uy; 0x87uy; 0xCFuy |])
-            .SetBase58Bytes(Base58Type.EXT_SECRET_KEY, [| 0x04uy; 0x35uy; 0x83uy; 0x94uy |])
-            .SetBech32(Bech32Type.WITNESS_PUBKEY_ADDRESS, bech32)
-            .SetBech32(Bech32Type.WITNESS_SCRIPT_ADDRESS, bech32)
-            .SetBech32(Bech32Type.TAPROOT_ADDRESS, bech32)
-            .SetMagic(0xdab5bffau)
-            .SetPort(19444)
-            .SetRPCPort(19443)
-            .SetName("ltc-reg")
-            .AddAlias("ltc-regtest")
-            .AddAlias("litecoin-reg")
-            .AddAlias("litecoin-regtest")
-            .SetUriScheme("litecoin")
-            .SetGenesis("010000000000000000000000000000000000000000000000000000000000000000000000d9ced4ed1130f7b7faad9be25323ffafa33232a17c3edf6cfd97bee6bafbdd97dae5494dffff7f20000000000101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff4804ffff001d0104404e592054696d65732030352f4f63742f32303131205374657665204a6f62732c204170706c65e280997320566973696f6e6172792c2044696573206174203536ffffffff0100f2052a010000004341040184710fa689ad5023690c80f3a49c8f13f8d45b8c857fbcbc8bc4a8e4d3eb4b10f4d4604fa08dce601aaf0f470216fe1b51850b4acf21b179c45070ac7b03a9ac00000000")
+    /// not used in GWallet
+    override self.CreateRegtest() =
+        null
