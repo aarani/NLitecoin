@@ -14,7 +14,7 @@ type internal Witness(inputs: TxInList) =
 
     member self.ReadWrite(stream: BitcoinStream) =
         for input in inputs do
-            if (stream.Serializing) then
+            if stream.Serializing then
                 let bytes = 
                     let script = 
                         match input.WitScript with
@@ -57,14 +57,14 @@ type LitecoinTransaction() =
             (((uint stream.TransactionOptions) &&& (uint TransactionOptions.Witness)) <> 0u) &&
             stream.ProtocolCapabilities.SupportWitness
 
-        let mutable flags = 0uy
+        let flags = 0uy
         if not stream.Serializing then
             stream.ReadWrite(ref self.nVersion)
             // Try to read the vin. In case the dummy is there, this will be read as an empty vector.
             stream.ReadWrite(ref self.vin)
             self.vin <- self.vin.WithTransaction self
             let hasNoDummy = (self.nVersion &&& Transaction.NoDummyInput) <> 0u && self.vin.Count = 0
-            if (witSupported && hasNoDummy) then
+            if witSupported && hasNoDummy then
                 self.nVersion <- self.nVersion &&& ~~~Transaction.NoDummyInput
 
             if self.vin.Count = 0 && witSupported && not hasNoDummy then
@@ -82,17 +82,24 @@ type LitecoinTransaction() =
             else
                 // We read a non-empty vin. Assume a normal vout follows.
                 stream.ReadWrite(ref self.vout)
-                self.vout<- self.vout.WithTransaction self
-            if ((flags &&& 1uy) <> 0uy) && witSupported then
-                // The witness flag is present, and we support witnesses.
-                flags <- flags ^^^ 1uy
-                let wit = Witness self.Inputs
-                wit.ReadWrite(stream)
-            if (flags &&& 8uy) <> 0uy then //MWEB extension tx flag
-                (* The MWEB flag is present, but currently no MWEB data is supported. 
-                    * This fix just prevent from throwing exception bellow so cannonical litecoin transaction can be read
-                    *)
-                flags <- flags ^^^ 8uy
+                self.vout <- self.vout.WithTransaction self
+            
+            let flags =
+                if ((flags &&& 1uy) <> 0uy) && witSupported then
+                    // The witness flag is present, and we support witnesses.
+                    let wit = Witness self.Inputs
+                    wit.ReadWrite stream
+                    flags ^^^ 1uy
+                else
+                    flags
+            let flags =
+                if (flags &&& 8uy) <> 0uy then //MWEB extension tx flag
+                    (* The MWEB flag is present, but currently no MWEB data is supported. 
+                        * This fix just prevent from throwing exception bellow so cannonical litecoin transaction can be read
+                        *)
+                    flags ^^^ 8uy
+                else
+                    flags
 
             if flags <> 0uy then
                 // Unknown flag in the serialization
@@ -105,10 +112,16 @@ type LitecoinTransaction() =
                     self.nVersion
             stream.ReadWrite(ref version)
 
-            if witSupported then
-                // Check whether witnesses need to be serialized.
-                if self.HasWitness then
-                    flags <- flags ||| 1uy
+            let flags =
+                if witSupported then
+                    // Check whether witnesses need to be serialized.
+                    if self.HasWitness then
+                        flags ||| 1uy
+                    else
+                        flags
+                else
+                    flags
+
             if flags <> 0uy then
                 // Use extended format in case witnesses are to be serialized.
                 let vinDummy = TxInList()
@@ -143,33 +156,39 @@ and LitecoinMainnetAddressStringParser() =
     inherit NetworkStringParser()
 
     override self.TryParse(str: string, network: Network, targetType: Type, result: byref<IBitcoinString>) =
-        let mutable success = false
-        if str.StartsWith("Ltpv", StringComparison.OrdinalIgnoreCase) && targetType.GetTypeInfo().IsAssignableFrom(typeof<BitcoinExtKey>.GetTypeInfo()) then
-            try
-                let decoded = Encoders.Base58Check.DecodeData str
-                decoded.[0] <- 0x04uy
-                decoded.[1] <- 0x88uy
-                decoded.[2] <- 0xADuy
-                decoded.[3] <- 0xE4uy
-                result <- BitcoinExtKey(Encoders.Base58Check.EncodeData decoded, network)
-                success <- true
-            with
-            | _ -> ()
-        if success then
+        let successLptv = 
+            if str.StartsWith("Ltpv", StringComparison.OrdinalIgnoreCase) && targetType.GetTypeInfo().IsAssignableFrom(typeof<BitcoinExtKey>.GetTypeInfo()) then
+                try
+                    let decoded = 
+                        Array.append
+                            [|  0x04uy; 0x88uy; 0xADuy; 0xE4uy |]
+                            (Encoders.Base58Check.DecodeData str |> Array.skip 4)
+                    result <- BitcoinExtKey(Encoders.Base58Check.EncodeData decoded, network)
+                    true
+                with
+                | _ -> 
+                    false
+            else
+                false
+        
+        if successLptv then
             true
         else
-            if str.StartsWith("Ltub", StringComparison.OrdinalIgnoreCase) && targetType.GetTypeInfo().IsAssignableFrom(typeof<BitcoinExtPubKey>.GetTypeInfo()) then
-                try
-                    let decoded = Encoders.Base58Check.DecodeData str
-                    decoded.[0] <- 0x04uy
-                    decoded.[1] <- 0x88uy
-                    decoded.[2] <- 0xB2uy
-                    decoded.[3] <- 0x1Euy
-                    result <- BitcoinExtPubKey(Encoders.Base58Check.EncodeData decoded, network)
-                    success <- true
-                with
-                | _ -> ()
-            if success then
+            let successLtub =
+                if str.StartsWith("Ltub", StringComparison.OrdinalIgnoreCase) && targetType.GetTypeInfo().IsAssignableFrom(typeof<BitcoinExtPubKey>.GetTypeInfo()) then
+                    try
+                        let decoded = 
+                            Array.append
+                                [| 0x04uy; 0x88uy; 0xB2uy; 0x1Euy |]
+                                (Encoders.Base58Check.DecodeData str |> Array.skip 4)
+                        result <- BitcoinExtPubKey(Encoders.Base58Check.EncodeData decoded, network)
+                        true
+                    with
+                    | _ -> 
+                        false
+                else
+                    false
+            if successLtub then
                 true
             else
                 base.TryParse(str, network, targetType, &result)
