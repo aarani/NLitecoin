@@ -52,91 +52,100 @@ type LitecoinTransaction() =
 
     override self.GetConsensusFactory() = LitecoinConsensusFactory.Instance
     
+    member private self.Read (stream: BitcoinStream) (witSupported: bool) =
+        let flags = 0uy
+        self.nVersion <- stream.ReadWrite self.nVersion
+        // Try to read the vin. In case the dummy is there, this will be read as an empty vector.
+        stream.ReadWrite(&self.vin)
+        self.vin <- self.vin.WithTransaction self
+        let hasNoDummy = (self.nVersion &&& Transaction.NoDummyInput) <> 0u && self.vin.Count = 0
+        if witSupported && hasNoDummy then
+            self.nVersion <- self.nVersion &&& ~~~Transaction.NoDummyInput
+
+        if self.vin.Count = 0 && witSupported && not hasNoDummy then
+            // We read a dummy or an empty vin.
+            let flags = stream.ReadWrite flags
+            if flags <> 0uy then
+                // Assume we read a dummy and a flag.
+                stream.ReadWrite(&self.vin)
+                self.vin <- self.vin.WithTransaction self
+                stream.ReadWrite(&self.vout)
+                self.vout <- self.vout.WithTransaction self
+            else
+                // Assume read a transaction without output.
+                self.vout <- TxOutList self
+        else
+            // We read a non-empty vin. Assume a normal vout follows.
+            stream.ReadWrite(&self.vout)
+            self.vout <- self.vout.WithTransaction self
+            
+        let flags =
+            if ((flags &&& 1uy) <> 0uy) && witSupported then
+                // The witness flag is present, and we support witnesses.
+                let wit = Witness self.Inputs
+                wit.ReadWrite stream
+                flags ^^^ 1uy
+            else
+                flags
+        let flags =
+            if (flags &&& 8uy) <> 0uy then //MWEB extension tx flag
+                (* The MWEB flag is present, but currently no MWEB data is supported. 
+                    * This fix just prevent from throwing exception bellow so cannonical litecoin transaction can be read
+                    *)
+                flags ^^^ 8uy
+            else
+                flags
+
+        if flags <> 0uy then
+            // Unknown flag in the serialization
+            raise <| FormatException "Unknown transaction optional data"
+
+    member private self.Write (stream: BitcoinStream) (witSupported: bool) =
+        let version = 
+            if witSupported && (self.vin.Count = 0 && self.vout.Count > 0) then 
+                self.nVersion ||| Transaction.NoDummyInput 
+            else 
+                self.nVersion
+        stream.ReadWrite version |> ignore
+
+        let flags =
+            if witSupported then
+                // Check whether witnesses need to be serialized.
+                if self.HasWitness then
+                    1uy
+                else
+                    0uy
+            else
+                0uy
+
+        let flags = 
+            if flags <> 0uy then
+                // Use extended format in case witnesses are to be serialized.
+                let vinDummy = TxInList()
+                stream.ReadWrite(ref vinDummy)
+                stream.ReadWrite flags
+            else
+                flags
+
+        stream.ReadWrite(&self.vin)
+        self.vin <- self.vin.WithTransaction self
+        stream.ReadWrite(&self.vout)
+        self.vout <- self.vout.WithTransaction self
+        if (flags &&& 1uy) <> 0uy then
+            let wit = Witness self.Inputs
+            wit.ReadWrite stream
+
     override self.ReadWrite(stream: BitcoinStream) =
         let witSupported = 
             (((uint stream.TransactionOptions) &&& (uint TransactionOptions.Witness)) <> 0u) &&
             stream.ProtocolCapabilities.SupportWitness
 
-        let flags = 0uy
         if not stream.Serializing then
-            stream.ReadWrite(ref self.nVersion)
-            // Try to read the vin. In case the dummy is there, this will be read as an empty vector.
-            stream.ReadWrite(ref self.vin)
-            self.vin <- self.vin.WithTransaction self
-            let hasNoDummy = (self.nVersion &&& Transaction.NoDummyInput) <> 0u && self.vin.Count = 0
-            if witSupported && hasNoDummy then
-                self.nVersion <- self.nVersion &&& ~~~Transaction.NoDummyInput
-
-            if self.vin.Count = 0 && witSupported && not hasNoDummy then
-                // We read a dummy or an empty vin.
-                stream.ReadWrite(ref flags)
-                if flags <> 0uy then
-                    // Assume we read a dummy and a flag.
-                    stream.ReadWrite(ref self.vin)
-                    self.vin <- self.vin.WithTransaction self
-                    stream.ReadWrite(ref self.vout)
-                    self.vout <- self.vout.WithTransaction self
-                else
-                    // Assume read a transaction without output.
-                    self.vout <- TxOutList self
-            else
-                // We read a non-empty vin. Assume a normal vout follows.
-                stream.ReadWrite(ref self.vout)
-                self.vout <- self.vout.WithTransaction self
-            
-            let flags =
-                if ((flags &&& 1uy) <> 0uy) && witSupported then
-                    // The witness flag is present, and we support witnesses.
-                    let wit = Witness self.Inputs
-                    wit.ReadWrite stream
-                    flags ^^^ 1uy
-                else
-                    flags
-            let flags =
-                if (flags &&& 8uy) <> 0uy then //MWEB extension tx flag
-                    (* The MWEB flag is present, but currently no MWEB data is supported. 
-                        * This fix just prevent from throwing exception bellow so cannonical litecoin transaction can be read
-                        *)
-                    flags ^^^ 8uy
-                else
-                    flags
-
-            if flags <> 0uy then
-                // Unknown flag in the serialization
-                raise <| FormatException "Unknown transaction optional data"
+            self.Read stream witSupported
         else
-            let version = 
-                if witSupported && (self.vin.Count = 0 && self.vout.Count > 0) then 
-                    self.nVersion ||| Transaction.NoDummyInput 
-                else 
-                    self.nVersion
-            stream.ReadWrite(ref version)
-
-            let flags =
-                if witSupported then
-                    // Check whether witnesses need to be serialized.
-                    if self.HasWitness then
-                        flags ||| 1uy
-                    else
-                        flags
-                else
-                    flags
-
-            if flags <> 0uy then
-                // Use extended format in case witnesses are to be serialized.
-                let vinDummy = TxInList()
-                stream.ReadWrite(ref vinDummy)
-                stream.ReadWrite(ref flags)
-
-            stream.ReadWrite(ref self.vin)
-            self.vin <- self.vin.WithTransaction self
-            stream.ReadWrite(ref self.vout)
-            self.vout <- self.vout.WithTransaction self
-            if (flags &&& 1uy) <> 0uy then
-                let wit = Witness self.Inputs
-                wit.ReadWrite stream
+            self.Write stream witSupported
         
-        stream.ReadWriteStruct(ref self.nLockTime)
+        stream.ReadWriteStruct(&self.nLockTime)
 
 and LitecoinBlockHeader() =
     inherit BlockHeader()
