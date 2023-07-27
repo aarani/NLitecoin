@@ -1,0 +1,44 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build-windows:
+    name: Build on Windows
+    runs-on: windows-2022
+
+    steps:
+
+      - uses: actions/checkout@v1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v2
+        with:
+          dotnet-version: 6.0.x
+
+      - name: Build solution
+        run: dotnet build NLitecoin.sln
+
+      - name: Run tests
+        run: dotnet test NLitecoin.sln
+
+  build-linux:
+    name: Build on Linux
+    runs-on: ubuntu-22.04
+    
+    steps:
+
+      - uses: actions/checkout@v1
+
+      - name: Install .NET 6
+        run: |
+          which sudo 2>/dev/null || (apt update && apt install --yes sudo)
+          sudo apt update
+          sudo apt install --yes --no-install-recommends ca-certificates
+          sudo apt install --yes --no-install-recommends dotnet6
+      
+      - name: Build solution
+        run: dotnet build NLitecoin.sln
+
+      - name: Run tests
+        run: dotnet test NLitecoin.sln

@@ -3,7 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.6.33829.357
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "NLitecoin", "src\NLitecoin\NLitecoin.fsproj", "{1128287F-0435-4FA9-B4DD-420A9E1FDB23}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "NLitecoin", "src\NLitecoin\NLitecoin.fsproj", "{1128287F-0435-4FA9-B4DD-420A9E1FDB23}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NLitecoin.Tests", "tests\NLitecoin.Tests\NLitecoin.Tests.csproj", "{F954D3AC-36BC-483E-8DB1-4CC65DF1694D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{1128287F-0435-4FA9-B4DD-420A9E1FDB23}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1128287F-0435-4FA9-B4DD-420A9E1FDB23}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1128287F-0435-4FA9-B4DD-420A9E1FDB23}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F954D3AC-36BC-483E-8DB1-4CC65DF1694D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F954D3AC-36BC-483E-8DB1-4CC65DF1694D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F954D3AC-36BC-483E-8DB1-4CC65DF1694D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F954D3AC-36BC-483E-8DB1-4CC65DF1694D}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
