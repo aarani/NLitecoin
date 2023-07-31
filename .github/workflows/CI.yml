@@ -42,3 +42,37 @@ jobs:
 
       - name: Run tests
         run: dotnet test NLitecoin.sln
+
+  package:
+    name: Package (Nuget)
+    needs: build-linux
+    runs-on: ubuntu-22.04
+    env:
+      BASE_VERSION: "0.1.0"
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Install .NET 6
+        run: |
+          which sudo 2>/dev/null || (apt update && apt install --yes sudo)
+          sudo apt update
+          sudo apt install --yes --no-install-recommends ca-certificates
+          sudo apt install --yes --no-install-recommends dotnet6
+      
+      - name: Install dependencies
+        run: dotnet restore
+      
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+      
+      - name: Package
+        # https://stackoverflow.com/questions/70249519/how-to-check-if-a-secret-variable-is-empty-in-if-conditional-github-actions
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        if: "${{ env.NUGET_API_KEY != '' }}"
+        run: |
+          git clone -b stable https://github.com/nblockchain/fsx
+          cd fsx
+          sudo ./scripts/CI/install_mono_from_microsoft_deb_packages.sh
+          cd ../src/NLitecoin
+          ../../fsx/Tools/nugetPush.fsx $BASE_VERSION ${{secrets.NUGET_API_KEY}}
