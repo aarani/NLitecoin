@@ -137,7 +137,7 @@ type LitecoinTransaction() =
 
     override self.ReadWrite(stream: BitcoinStream) =
         let witSupported = 
-            (((uint stream.TransactionOptions) &&& (uint TransactionOptions.Witness)) <> 0u) &&
+            (((uint32 stream.TransactionOptions) &&& (uint32 TransactionOptions.Witness)) <> 0u) &&
             stream.ProtocolCapabilities.SupportWitness
 
         if not stream.Serializing then
