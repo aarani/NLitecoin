@@ -69,7 +69,7 @@ jobs:
         # https://stackoverflow.com/questions/70249519/how-to-check-if-a-secret-variable-is-empty-in-if-conditional-github-actions
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        if: "${{ env.NUGET_API_KEY != '' }}"
+        if: "${{ env.NUGET_API_KEY != '' && github.ref == 'refs/heads/master' }}"
         run: |
           git clone -b stable https://github.com/nblockchain/fsx
           cd fsx
